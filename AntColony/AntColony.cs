@@ -1,34 +1,29 @@
 ﻿using System.Collections.Concurrent;
+using System.Text;
 
 public class AntColony
 {
-    private double alpha;
-    private double beta;
+    List<(int AntCount, double Alpha, double Beta)> param;
     private double rho;
-    private int antCount;
     private int iterations;
-
     private double[][] distanceMatrix;
     private double[][] pheromoneMatrix;
     private int numCities;
 
-    public List<int> BestTour { get; private set; }
+    public List<int>? BestTour { get; private set; }
     public double BestTourLength { get; private set; }
 
     public AntColony(
         double[][] _distanceMatrix,
-        int _antCount = 10,
+        List<(int, double, double)> _param,
         int _iterations = 1000,
-        double _alpha = 1.0,
-        double _beta = 1.0,
-        double _rho = 0.5)
+        double _rho = 0.5
+        )
     {
+        param = _param;
         distanceMatrix = _distanceMatrix;
         numCities = _distanceMatrix.Length;
-        antCount = _antCount;
         iterations = _iterations;
-        alpha = _alpha;
-        beta = _beta;
         rho = _rho;
 
         pheromoneMatrix = new double[numCities][];
@@ -50,13 +45,29 @@ public class AntColony
     public List<int> Solve()
     {
         Lock Best = new();
-
+        Lock An =new();
+        var q = new StringBuilder();
+        var antCount = param.Sum(x => x.AntCount);
         for (int iteration = 0; iteration < iterations; iteration++)
         {
             var ants = new ConcurrentBag<Ant>();
-            Parallel.For(0, antCount, (i, state) =>
+
+            var antC = 0;
+            var paramN = 0;
+            Parallel.For(0, antCount, i =>
             {
-                var ant = new Ant(distanceMatrix, pheromoneMatrix, alpha, beta);
+
+                var ant = new Ant(distanceMatrix, pheromoneMatrix, param[paramN].Alpha, param[paramN].Beta);
+                lock(An)
+                {
+                    antC++;
+                    if (antC > param[paramN].AntCount)
+                    {
+                        antC = 0;
+                        paramN++;
+                    }
+                }
+              
 
                 while (ant.Tour.Count < numCities)
                 {
@@ -76,10 +87,10 @@ public class AntColony
                         BestTour = new List<int>(ant.Tour);
                     }
             });
-
+            q.Append($"{iteration} {BestTourLength}\n");           
             UpdatePheromones(ants);
         }
-
+        File.AppendAllText("q.txt", q.ToString());
         return BestTour;
     }
 
